@@ -1,133 +1,135 @@
-const API_BASE_URL = "const API_URL = import.meta.env.VITE_API_URL";  // Changed from local to new ENV variable for hosting/deploy
+// Base URL comes from your Amplify env variable (VITE_API_URL)
+export const API_BASE_URL = import.meta.env.VITE_API_URL;
+
+// Small helper to handle errors consistently
+async function handleResponse(res, defaultErrorMsg = "Request failed") {
+  if (!res.ok) {
+    let msg = defaultErrorMsg;
+    try {
+      const data = await res.json();
+      msg = data.detail || data.message || msg;
+    } catch {
+      const text = await res.text();
+      if (text) msg = text;
+    }
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+// -------- USER / AUTH --------
 
 // Register a new user
 export async function registerUser(userData) {
-  const res = await fetch(`${API_BASE_URL}/user/register`, {
+  const res = await fetch(`${API_BASE_URL}/api/user/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(userData),
   });
-  
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.detail || "Registration failed");
-  }
-  
-  return await res.json();
+  return handleResponse(res, "Registration failed");
 }
 
 // Log in user
 export async function loginUser(username, password) {
-  const res = await fetch(`${API_BASE_URL}/user/login`, {
+  const res = await fetch(`${API_BASE_URL}/api/user/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
   });
-  return await res.json();
+  return handleResponse(res, "Login failed");
 }
 
-// Get specific question by ID 
+// -------- GAME --------
+
+// Get specific question by ID (if your backend supports it)
 export async function getQuestion(questionId) {
-  const res = await fetch(`${API_BASE_URL}/game/${questionId}`);
-  return await res.json();
+  const res = await fetch(`${API_BASE_URL}/api/game/${questionId}`);
+  return handleResponse(res, "Failed to fetch question");
 }
 
 // Get a random question
 export async function getRandomQuestion() {
-  const res = await fetch(`${API_BASE_URL}/game/random`);
-  return await res.json();
+  const res = await fetch(`${API_BASE_URL}/api/game/random`);
+  return handleResponse(res, "Failed to fetch random question");
 }
 
-export async function submitAnswer(data){
-  const res = await fetch("http://127.0.0.1:8000/api/game/submit",{
+// Submit answer
+export async function submitAnswer(data) {
+  const res = await fetch(`${API_BASE_URL}/api/game/submit`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  return await res.json();
+  return handleResponse(res, "Failed to submit answer");
 }
+
+// -------- LEADERBOARD --------
 
 export async function getLeaderboard(limit = 10) {
-  const res = await fetch(`http://127.0.0.1:8000/api/leaderboard?limit=${limit}`);
-  return await res.json();
+  const res = await fetch(
+    `${API_BASE_URL}/api/leaderboard?limit=${encodeURIComponent(limit)}`
+  );
+  return handleResponse(res, "Failed to fetch leaderboard");
 }
 
-
-export async function submitScore(user_id, score){
-  const res = await fetch(`${API_BASE_URL}/leaderboard/submit_score`, {
+export async function submitScore(user_id, score) {
+  const res = await fetch(`${API_BASE_URL}/api/leaderboard/submit_score`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ user_id, score }),
   });
-
-  return await res.json();
+  return handleResponse(res, "Failed to submit score");
 }
 
+// -------- MEDIA --------
 
 export async function getQuestionMedia(questionId) {
-  const res = await fetch(`${API_BASE_URL}/media/${questionId}`);
-  return await res.json();
+  const res = await fetch(`${API_BASE_URL}/api/media/${questionId}`);
+  return handleResponse(res, "Failed to fetch media");
 }
 
 export function getFullMediaUrl(mediaPath) {
-  return `http://localhost:8000/media/${mediaPath}`;
+  // Adjust to /api/media if that’s your actual route
+  return `${API_BASE_URL}/media/${mediaPath}`;
 }
 
-// Settings apis
+// -------- SETTINGS / ACCOUNT --------
 
 export async function updateUsername(username, password, newUsername) {
   if (!username || !password || !newUsername) {
     throw new Error("Missing required fields for username update");
   }
 
-  try {
-    const res = await fetch(`${API_BASE_URL}/user/update-username`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username,
-        password,
-        new_username: newUsername
-      }),
-    });
+  const res = await fetch(`${API_BASE_URL}/api/user/update-username`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      username,
+      password,
+      new_username: newUsername,
+    }),
+  });
 
-    const responseData = await res.json();
-    
-    if (!res.ok) {
-      console.error("API error response:", responseData);
-      throw new Error(responseData.detail || `Error ${res.status}: ${res.statusText}`);
-    }
-
-    return responseData;
-  } catch (error) {
-    console.error("Update username error:", error);
-    throw error;
-  }
+  return handleResponse(res, "Failed to update username");
 }
 
-// Update Password (for logged-in users) - Fixed
+// Update Password
 export async function updatePassword(username, current_password, new_password) {
-  const res = await fetch(`${API_BASE_URL}/user/update-password`, {
+  const res = await fetch(`${API_BASE_URL}/api/user/update-password`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       username,
       current_password,
-      new_password: new_password,
+      new_password,
     }),
   });
 
-  if (!res.ok) {
-    const errorData = await res.json();
-    throw new Error(errorData.detail || "Failed to update password");
-  }
-  return await res.json();
+  return handleResponse(res, "Failed to update password");
 }
 
-
-
 export async function updateEmail(username, password, email, newEmail) {
-  const res = await fetch(`${API_BASE_URL}/user/update-email`, {
+  const res = await fetch(`${API_BASE_URL}/api/user/update-email`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -138,64 +140,30 @@ export async function updateEmail(username, password, email, newEmail) {
     }),
   });
 
-  if (!res.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.message || 'Failed to update email');
-  }
-
-  return await res.json();
-
-  
+  return handleResponse(res, "Failed to update email");
 }
 
 export async function getEmail(username, password) {
-  try {
-    const res = await fetch(`${API_BASE_URL}/user/email?username=${username}&password=${password}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!res.ok) {
-      throw new Error('Failed to fetch email');
+  const res = await fetch(
+    `${API_BASE_URL}/api/user/email?username=${encodeURIComponent(
+      username
+    )}&password=${encodeURIComponent(password)}`,
+    {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
     }
+  );
 
-    const data = await res.json();
-    return data.email;
-  } catch (error) {
-    console.error('Error fetching email:', error);
-    throw error;
-  }
+  const data = await handleResponse(res, "Failed to fetch email");
+  return data.email;
 }
 
 export async function deactivateAccount(username, password) {
-  try {
-    const res = await fetch(`${API_BASE_URL}/user/deactivate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
-    });
-    
-    if (!res.ok) {
-      const errorText = await res.text();
-      let errorMessage = `Error ${res.status}`;
-      
-      try {
-        // Try to parse as JSON
-        const errorData = JSON.parse(errorText);
-        errorMessage = errorData.detail || errorData.message || errorMessage;
-      } catch (e) {
-       
-        if (errorText) errorMessage = errorText;
-      }
-      
-      throw new Error(errorMessage);
-    }
-    
-    return await res.json();
-  } catch (error) {
-    console.error("Deactivate account error:", error);
-    throw error;
-  }
+  const res = await fetch(`${API_BASE_URL}/api/user/deactivate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+
+  return handleResponse(res, "Failed to deactivate account");
 }
