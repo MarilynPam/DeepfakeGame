@@ -1,8 +1,10 @@
 // Base URL comes from Amplify env variable (VITE_API_URL)
 //export const API_BASE_URL = import.meta.env.VITE_API_URL;
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
-// For local development:
-const API_BASE_URL = "http://127.0.0.1:8000";
+
+// For local development only:
+//const API_BASE_URL = "http://127.0.0.1:8000";
 
 // Small helper to handle errors consistently
 async function handleResponse(res, defaultErrorMsg = "Request failed") {
