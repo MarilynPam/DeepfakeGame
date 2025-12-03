@@ -1,5 +1,8 @@
-// Base URL comes from your Amplify env variable (VITE_API_URL)
-export const API_BASE_URL = import.meta.env.VITE_API_URL;
+// Base URL comes from Amplify env variable (VITE_API_URL)
+//export const API_BASE_URL = import.meta.env.VITE_API_URL;
+
+// For local development:
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 // Small helper to handle errors consistently
 async function handleResponse(res, defaultErrorMsg = "Request failed") {
@@ -38,6 +41,12 @@ export async function loginUser(username, password) {
   });
   return handleResponse(res, "Login failed");
 }
+
+export async function getMyTier(userId) {
+  const res = await fetch(`${API_BASE_URL}/api/game/my_tier/${userId}`);
+  return handleResponse(res, "Failed to fetch tier");
+}
+
 
 // -------- GAME --------
 

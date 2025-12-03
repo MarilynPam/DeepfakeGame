@@ -215,7 +215,7 @@ def get_user_highscore(user_id):
     cursor.execute('SELECT HighScore FROM Users WHERE UserID = ?', (user_id,))
     row = cursor.fetchone() 
     conn.close()
-    return cursor.fetchone()[0]
+    return row[0] if row else 0
 
 
 def get_question_with_answers(question_id):
@@ -265,15 +265,16 @@ def get_leaderboard(limit=10):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('''
-    SELECT u.Username, l.Score
+    SELECT u.Username, l.Score, COALESCE(d.Tier, 'Unrated')
     FROM Leaderboard l
     JOIN Users u ON l.UserID = u.UserID
+    LEFT JOIN UserDifficulty d ON d.UserID = u.UserID
     ORDER BY l.Score DESC 
     LIMIT ?
     ''', (limit,))
     result = cursor.fetchall()
     conn.close()
-    return [{"username": row[0], "score": row[1]} for row in result]
+    return [{"username": row[0], "score": row[1], "tier": row[2]} for row in result]
 
 
 def get_media(question_id):
@@ -623,7 +624,7 @@ def get_user_by_id(user_id):
     ''', (user_id,))
     result = cursor.fetchone()
     conn.close()
-    return row
+    return result
 
 
 def get_email(user_id):
@@ -657,6 +658,10 @@ def update_user_email(username, password, current_email, new_email):
     return updated
 
 def record_response(user_id, question_id, correct, response_time_ms):
+    # Ignore guest / invalid users
+    if user_id is None or user_id <= 0:
+        return
+
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('''
@@ -674,6 +679,7 @@ def compute_user_features():
                AVG(Correct) as Accuracy,
                AVG(ResponseTimeMs) as AvgMs
         FROM Responses
+        WHERE UserID > 0
         GROUP BY UserID
     ''')
     rows = cursor.fetchall()

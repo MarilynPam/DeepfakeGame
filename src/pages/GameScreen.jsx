@@ -4,7 +4,6 @@ import { useAuth } from "../context/AuthContext";
 import { getFullMediaUrl, getRandomQuestion, submitAnswer, getQuestionMedia, submitScore } from "../api";
 import Runner from '../components/Runner';
 
-
 // This page is the game container. It displays 4 images or videos which the user may choose from. 
 // Runner component is available on this page 
 let askedQuestions = Array(100).fill(false);
@@ -31,9 +30,16 @@ export function GameScreen() {
   const maxRounds = 5;
   const [questionCount, setQuestionCount] = useState(1);
   const [gameFinished, setGameFinished] = useState(false);
-  const [feedback, setFeedback] = useState({ show: false, isCorrect: false, correctAnswer: null, explanation: null });
-  const[questionStartTime, setQuestionStartTime] = useState(null);
-  //console.log("Logged in as:", user);
+  const [feedback, setFeedback] = useState({
+    show: false,
+    isCorrect: false,
+    correctAnswer: null,
+    explanation: null,
+    tier: null,
+  });
+  const [questionStartTime, setQuestionStartTime] = useState(null);
+  const [userTier, setUserTier] = useState(null);
+  // console.log("Logged in as:", user);
 
   // Reset askedQuestions when component mounts
   useEffect(() => {
@@ -45,17 +51,20 @@ export function GameScreen() {
       setIsLoading(true);
       let result = await getRandomQuestion();
 
-      while(askedQuestions[result.question_id] === true){
+      while (askedQuestions[result.question_id] === true) {
         result = await getRandomQuestion();
       }
 
       askedQuestions[result.question_id] = true;
 
-      if (result!=="undefined" && !result.error){
+      if (result !== "undefined" && !result.error) {
         const media = await getQuestionMedia(result.question_id);
         // transform backend image paths to match my folder
         const images = result.answers.map((a, index) => {
-          const isTextQuestion = !a.text.includes('.jpg') && !a.text.includes('.png') && !a.text.includes('.mp4');
+          const isTextQuestion =
+            !a.text.includes('.jpg') &&
+            !a.text.includes('.png') &&
+            !a.text.includes('.mp4');
           const isVideo = a.text.includes('.mp4');
           return {
             id: a.id,
@@ -69,10 +78,10 @@ export function GameScreen() {
 
         // Shuffle the images array
         const shuffledImages = shuffleArray(images);
-        
+
         // Find the index of the correct answer after shuffling
         const correctIndex = shuffledImages.findIndex(img => img.isDeepfake);
-        
+
         setQuestion({
           question_id: result.question_id,
           question_text: result.question_text,
@@ -97,7 +106,7 @@ export function GameScreen() {
     if (gameFinished) {
       const submitFinalScore = async () => {
         if (user?.user_id) {
-        const res =  await submitScore(user.user_id, score);
+          await submitScore(user.user_id, score);
         }
         navigate("/fin", { state: { score } });
       };
@@ -105,15 +114,15 @@ export function GameScreen() {
     }
   }, [gameFinished, score, user, navigate]);
 
-  {/* Function to handle user answer selection */}
+  // Function to handle user answer selection
   const handleAnswer = async (image) => {
     if (isAnswered) return;
 
-    setSelected(image.id);
-    setShowFeedback(true);
-
     const now = Date.now();
     const responseTimeMs = questionStartTime ? (now - questionStartTime) : 0;
+
+    setSelected(image.id);
+    setShowFeedback(true);
 
     let earned = 0;
     const isCorrect = image.id === correctId;
@@ -129,41 +138,69 @@ export function GameScreen() {
       show: true,
       isCorrect: isCorrect,
       correctAnswer: correctAnswer,
-      explanation: correctAnswer?.feedback || 'This was the real image. Look for unnatural features, background inconsistencies, or unusual details.'
+      explanation:
+        correctAnswer?.feedback ||
+        'This was the real image. Look for unnatural features, background inconsistencies, or unusual details.',
+      tier: null,   // will be filled after backend call (if logged in)
     });
 
     setIsAnswered(true);
 
-    // Submit to backend
-    await submitAnswer({
-      user_id: user?.user_id || -1,
-      question_id: question.question_id,
-      selected_id: image.id,
-      correct_id: correctId,
-      score_earned: earned,
-    });
+    // Only log to backend / ML if the user is logged in
+    if (user?.user_id) {
+      try {
+        const res = await submitAnswer({
+          user_id: user.user_id,
+          question_id: question.question_id,
+          selected_id: image.id,
+          correct_id: correctId,
+          score_earned: earned,
+          response_time_ms: responseTimeMs,
+        });
+
+        console.log("Submit response:", res);
+
+        setFeedback(prev => ({
+          ...prev,
+          tier: res.tier || "Unrated",
+        }));
+
+        if (res.tier){
+          setUserTier(res.tier);
+        }
+
+      } catch (err) {
+        console.error("Failed to submit answer:", err);
+      }
+    }
   };
 
-  {/* Function to go to the next question */}
+  // Function to go to the next question
   const handleNext = () => {
     setSelected(null);
     setShowFeedback(false);
     setIsAnswered(false);
     setCorrectId(null);
-    setFeedback({ show: false, isCorrect: false, correctAnswer: null, explanation: null });
+    setFeedback({
+      show: false,
+      isCorrect: false,
+      correctAnswer: null,
+      explanation: null,
+      tier: null,
+    });
     setIsLoading(true);
 
     setQuestionCount((prev) => {
       const newCount = prev + 1;
-      if(newCount > maxRounds) {
+      if (newCount > maxRounds) {
         askedQuestions = Array(100).fill(false);
         setGameFinished(true);
       }
       return newCount;
     });
   };
-  
-  if (isLoading || !question) { 
+
+  if (isLoading || !question) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center">
         <div className="flex flex-col items-center space-y-4">
@@ -174,24 +211,40 @@ export function GameScreen() {
       </div>
     );
   }
-  
+
   return (
-    <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center gap-8 p-4"> {/* Page container */}
+    <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center gap-8 p-4">
       {user?.username ? (
-      <p className="text-sm text-slate-400 font-mono">
-        Welcome, {user.username}!
-      </p>
-    ) : (
-      <p className="text-sm text-yellow-400 font-mono">
-        Playing as guest – your scores won't be saved.
-      </p>
-    )}
+        <p className="text-sm text-slate-400 font-mono">
+          Welcome, {user.username}!
+        </p>
+      ) : (
+        <p className="text-sm text-yellow-400 font-mono">
+          Playing as guest – your scores won't be saved.
+        </p>
+      )}
+
+      {user?.username && userTier && (
+        <span className="mt-1 px-3 py-1 rounded-full text-xs font-mono bg-slate-800 border border-slate-600">
+          Your Tier:&nbsp;
+          <span
+            className={
+              userTier === "Easy"
+                ? "text-green-400"
+                : userTier === "Medium"
+                ? "text-yellow-400"
+                : "text-red-400"
+            }
+          >
+            {userTier}
+          </span>
+        </span>
+      )}
 
       <p className="text-sm text-slate-400 font-mono">
         Round {questionCount} / {maxRounds}
       </p>
-    
-      
+
       {/* Question text display */}
       <div className="text-center max-w-2xl">
         <p className="text-2xl font-mono mb-4">{question.question_text}</p>
@@ -203,7 +256,9 @@ export function GameScreen() {
             <div className="text-green-300">
               <p>Correct! +10 points</p>
               <p className="text-sm mt-2">
-                {feedback.correctAnswer?.text ? 'Correct answer!' : 'You correctly identified the deepfake!'}
+                {feedback.correctAnswer?.text
+                  ? 'Correct answer!'
+                  : 'You correctly identified the deepfake!'}
               </p>
             </div>
           ) : (
@@ -212,6 +267,12 @@ export function GameScreen() {
               <p className="text-sm mt-2">{feedback.explanation}</p>
             </div>
           )}
+
+          {feedback.tier && (
+            <p className="text-sm mt-2 text-blue-300">
+              Difficulty Tier: {feedback.tier}
+            </p>
+          )}
         </div>
       )}
 
@@ -219,7 +280,7 @@ export function GameScreen() {
       <div className="grid grid-cols-2 gap-4">
         {question.images.map((item) => {
           let borderColor = 'border-transparent'
-      
+
           if (isAnswered) {
             if (item.id === correctId) {
               borderColor = 'border-green-500'
@@ -277,7 +338,7 @@ export function GameScreen() {
           </button>
         </div>
       )}
-      <Runner/>
+      <Runner />
     </div>
   )
 }

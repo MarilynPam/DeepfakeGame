@@ -42,15 +42,29 @@ export function Leaderboard() {
               <tr className="border-b border-slate-600">
                 <th className="py-2 font-mono">Username</th>
                 <th className="py-2 text-right font-mono">High Score</th>
+                <th className="py-2 text-center font-mono">Difficulty Tier</th>
               </tr>
             </thead>
-            <tbody>{leaders.map((user, idx) => (
-              <tr key={idx} className="border-b border-slate-700">
-                <td className="py-2">{user.username}</td>
-                <td className="py-2 text-right">{user.score}</td>
-              </tr>
-            ))}</tbody>
+            <tbody>
+              {leaders.map((user, idx) => {
+                let tierColor = "text-gray-300";
+                if (user.tier === "Easy") tierColor = "text-green-400";
+                else if (user.tier === "Medium") tierColor = "text-yellow-400";
+                else if (user.tier === "Hard") tierColor = "text-red-400";
+
+                return (
+                  <tr key={idx} className="border-b border-slate-700">
+                    <td className="py-2">{user.username}</td>
+                    <td className="py-2 text-right">{user.score}</td>
+                    <td className={`py-2 text-center font-mono ${tierColor}`}>
+                      {user.tier || "Unrated"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
           </table>
+
         )}
       </div>
         <Runner/>
