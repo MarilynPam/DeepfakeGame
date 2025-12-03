@@ -1,5 +1,8 @@
 import sqlite3
 import hashlib
+import datetime as dt
+import numpy as np
+from sklearn.cluster import KMeans
 
 from datetime import datetime, timezone
 
@@ -58,6 +61,31 @@ def init_db():
         UserID INTEGER,
         Score INTEGER DEFAULT 0,
         ScoreDate TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (UserID) REFERENCES Users(UserID)
+    )
+    ''')
+
+
+        # Per-attempt responses (NEW)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS Responses (
+        ResponseID INTEGER PRIMARY KEY AUTOINCREMENT,
+        UserID INTEGER NOT NULL,
+        QuestionID INTEGER NOT NULL,
+        Correct INTEGER NOT NULL,           -- 0/1
+        ResponseTimeMs INTEGER NOT NULL,
+        CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (UserID) REFERENCES Users(UserID),
+        FOREIGN KEY (QuestionID) REFERENCES Questions(QuestionID)
+    )
+    ''')
+
+    # Cached difficulty per user (NEW)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS UserDifficulty (
+        UserID INTEGER PRIMARY KEY,
+        Tier TEXT NOT NULL,                 -- 'Easy','Medium','Hard'
+        UpdatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (UserID) REFERENCES Users(UserID)
     )
     ''')
@@ -122,6 +150,7 @@ def authenticate_user(username: str, password: str):
     return result[0] if result else None
 
 
+
 def add_question(question_type, question_string):
     # add a question to the database
     # type is either 'text', 'image', or 'video'
@@ -184,6 +213,8 @@ def get_user_highscore(user_id):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('SELECT HighScore FROM Users WHERE UserID = ?', (user_id,))
+    row = cursor.fetchone() 
+    conn.close()
     return cursor.fetchone()[0]
 
 
@@ -499,7 +530,7 @@ def update_username(user_id, new_username):
 def update_email(user_id, new_email):
     conn = get_connection()
     cursor = conn.cursor()
-    now = datetime.datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
 
     # Check if email exists
     cursor.execute('''SELECT 1 FROM Users WHERE Email=?''', (new_email,))
@@ -592,7 +623,7 @@ def get_user_by_id(user_id):
     ''', (user_id,))
     result = cursor.fetchone()
     conn.close()
-    return result
+    return row
 
 
 def get_email(user_id):
@@ -612,7 +643,7 @@ def get_email(user_id):
 def update_user_email(username, password, current_email, new_email):
     conn = get_connection()
     cursor = conn.cursor()
-    now = datetime.datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
 
     cursor.execute("""
         UPDATE Users 
@@ -624,3 +655,71 @@ def update_user_email(username, password, current_email, new_email):
     conn.commit()
     conn.close()
     return updated
+
+def record_response(user_id, question_id, correct, response_time_ms):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+    INSERT INTO Responses (UserID, QuestionID, Correct, ResponseTimeMs)
+    VALUES (?, ?, ?, ?)
+    ''', (user_id, question_id, int(correct), response_time_ms))
+    conn.commit()
+    conn.close()
+
+def compute_user_features():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT UserID,
+               AVG(Correct) as Accuracy,
+               AVG(ResponseTimeMs) as AvgMs
+        FROM Responses
+        GROUP BY UserID
+    ''')
+    rows = cursor.fetchall()
+    conn.close()
+    if not rows: 
+        return [], np.empty((0,2), dtype=float)
+    
+    users = [r[0] for r in rows]
+    X = np.array([[r[1], r[2]] for r in rows], dtype=float)
+    return users, X
+
+def assign_tiers(users, X):
+    if len(users) < 3:
+        # fallback rule if not enough data
+        tiers = {}
+        for i, u in enumerate(users):
+            acc, avg_ms = X[i]
+            if acc >= 0.8 and avg_ms <= 2000: tiers[u] = "Easy"
+            elif acc >= 0.5: tiers[u] = "Medium"
+            else: tiers[u] = "Hard"
+        return tiers
+
+    X_scaled = np.column_stack([X[:,0], X[:,1] / 2000.0])
+    km = KMeans(n_clusters=3, n_init="auto", random_state=42)
+    labels = km.fit_predict(X_scaled)
+    centers = km.cluster_centers_
+    order = np.argsort(-(centers[:,0] - centers[:,1]))
+    tier_names = ["Easy","Medium","Hard"]
+    cluster_to_tier = {order[i]: tier_names[i] for i in range(3)}
+    return {users[i]: cluster_to_tier[labels[i]] for i in range(len(users))}
+
+def recompute_difficulty():
+    users, X = compute_user_features()
+    if len(users) == 0:
+        return {}
+    tiers = assign_tiers(users, X)
+    conn = get_connection()
+    cursor = conn.cursor()
+    for u, t in tiers.items():
+        cursor.execute('''
+            INSERT INTO UserDifficulty (UserID, Tier, UpdatedAt)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(UserID) DO UPDATE SET
+              Tier=excluded.Tier,
+              UpdatedAt=CURRENT_TIMESTAMP
+        ''', (u, t))
+    conn.commit()
+    conn.close()
+    return tiers

@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from db import get_connection
 from db import update_leaderboard
+import db
 
 router = APIRouter()
 
@@ -11,12 +12,31 @@ class SubmitRequest(BaseModel):
     selected_id: int
     correct_id: int
     score_earned: int
+    response_time_ms: int #for analytics
 
 @router.post("/submit")
 def submit_answer(data: SubmitRequest):
+    is_correct = int(data.selected_id == data.correct_id)
+    # 1) Store this attempt in the ML logging table
+    db.record_response(
+        user_id=data.user_id,
+        question_id=data.question_id,
+        correct=is_correct,
+        response_time_ms=data.response_time_ms
+    )
+
+    # 2) Update leaderboard score
+    update_leaderboard(data.user_id, data.score_earned)
+
+    # 3) Recompute user ML tiers (small project = OK to do per submit)
+    tiers = db.recompute_difficulty()
+    user_tier = tiers.get(data.user_id, "Unrated")
+
     return {
         "message": "Answer submitted.",
-        "earned": data.score_earned
+        "earned": data.score_earned,
+        "correct": bool(is_correct),
+        "tier": user_tier,
     }
 
 
