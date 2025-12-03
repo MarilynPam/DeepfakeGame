@@ -265,16 +265,23 @@ def get_leaderboard(limit=10):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('''
-    SELECT u.Username, l.Score, COALESCE(d.Tier, 'Unrated')
-    FROM Leaderboard l
-    JOIN Users u ON l.UserID = u.UserID
-    LEFT JOIN UserDifficulty d ON d.UserID = u.UserID
-    ORDER BY l.Score DESC 
-    LIMIT ?
+        SELECT 
+            COALESCE(u.Username, 'Unknown') as Username,
+            l.Score,
+            COALESCE(d.Tier, 'Unrated') as Tier
+        FROM Leaderboard l
+        LEFT JOIN Users u ON l.UserID = u.UserID
+        LEFT JOIN UserDifficulty d ON d.UserID = l.UserID
+        ORDER BY l.Score DESC
+        LIMIT ?
     ''', (limit,))
     result = cursor.fetchall()
     conn.close()
-    return [{"username": row[0], "score": row[1], "tier": row[2]} for row in result]
+    return [
+        {"username": row[0], "score": row[1], "tier": row[2]}
+        for row in result
+    ]
+
 
 
 def get_media(question_id):
