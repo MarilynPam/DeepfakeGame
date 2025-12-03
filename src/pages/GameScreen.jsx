@@ -32,7 +32,7 @@ export function GameScreen() {
   const [questionCount, setQuestionCount] = useState(1);
   const [gameFinished, setGameFinished] = useState(false);
   const [feedback, setFeedback] = useState({ show: false, isCorrect: false, correctAnswer: null, explanation: null });
-  
+  const[questionStartTime, setQuestionStartTime] = useState(null);
   //console.log("Logged in as:", user);
 
   // Reset askedQuestions when component mounts
@@ -79,6 +79,7 @@ export function GameScreen() {
           images: shuffledImages,
           correctIndex: correctIndex
         });
+        setQuestionStartTime(Date.now());
       }
       setIsLoading(false);
     };
@@ -110,6 +111,9 @@ export function GameScreen() {
 
     setSelected(image.id);
     setShowFeedback(true);
+
+    const now = Date.now();
+    const responseTimeMs = questionStartTime ? (now - questionStartTime) : 0;
 
     let earned = 0;
     const isCorrect = image.id === correctId;
