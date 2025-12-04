@@ -1,12 +1,8 @@
 // Base URL comes from Amplify env variable (VITE_API_URL)
-export const API_BASE_URL = import.meta.env.VITE_API_URL;
-// Base URL comes from Amplify env variable (VITE_API_URL)
+// Use the deployed API Gateway URL for all environments
+export const API_BASE_URL = "https://xfzdgrmo9c.execute-api.us-east-1.amazonaws.com";
 
 //const API_BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
-// Use the API Gateway URL for ALL environments
-//export const API_BASE_URL = "https://xfzdgrmo9c.execute-api.us-east-1.amazonaws.com";
-
-// example: "https://1gv9xoj1d1.execute-api.us-east-1.amazonaws.com"
 
 
 // For local development only:
